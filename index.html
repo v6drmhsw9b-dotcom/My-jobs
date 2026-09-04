@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#111111"><link rel="manifest" href="manifest.json"><link rel="apple-touch-icon" href="icon-192.png">
+<title>My Jobs</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f5f5f7;color:#111;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+header{padding:18px 16px 7px;font-size:28px;font-weight:800}.tabs{display:flex;gap:7px;padding:8px 12px;overflow:auto}
+.tab{border:0;border-radius:18px;padding:9px 13px;background:#e5e5ea;font-weight:700;white-space:nowrap}.tab.active{background:#111;color:#fff}
+main{padding:8px 12px 105px}.card{background:#fff;border-radius:16px;padding:15px;margin:10px 0;box-shadow:0 1px 5px #0001}
+.title{font-size:18px;font-weight:800}.muted{color:#666;font-size:14px;margin-top:5px;line-height:1.45}.badge{display:inline-block;margin-top:9px;padding:5px 9px;border-radius:10px;background:#eee;font-size:12px;font-weight:800}
+.money{margin-top:10px;line-height:1.55}.profit{font-size:18px;font-weight:800}.wait{margin-top:8px;font-weight:700}
+button.primary{position:fixed;right:18px;bottom:20px;border:0;border-radius:28px;padding:15px 20px;background:#111;color:#fff;font-size:16px;font-weight:800;box-shadow:0 5px 20px #0003}
+button.small{border:0;border-radius:10px;padding:9px 11px;background:#eee;margin:9px 5px 0 0;font-weight:700}
+.modal{position:fixed;inset:0;background:#0006;display:none;align-items:flex-end;z-index:5}.sheet{background:#f5f5f7;border-radius:22px 22px 0 0;width:100%;max-height:94vh;overflow:auto;padding:18px 16px 30px}
+input,textarea,select{width:100%;padding:12px;border:1px solid #ddd;border-radius:10px;margin:6px 0 12px;font-size:16px;background:#fff}label{font-size:13px;font-weight:700}.row{display:flex;gap:8px}.row>*{flex:1}
+.hint{font-size:12px;color:#666;margin:-7px 0 12px}.section{font-size:13px;font-weight:800;margin-top:5px}.empty{text-align:center;color:#777;padding:50px 10px}
+.summary{background:#fff;border-radius:16px;padding:14px;margin:10px 0;display:grid;grid-template-columns:1fr 1fr;gap:8px}.summary b{font-size:20px}
+</style></head>
+<body>
+<header>My Jobs</header>
+<div class="tabs">
+<button class="tab active" data-filter="all">All</button><button class="tab" data-filter="today">Today</button>
+<button class="tab" data-filter="open">Incomplete</button><button class="tab" data-filter="waiting">Parts Waiting</button><button class="tab" data-filter="completed">Completed</button>
+</div>
+<main><div id="summary" class="summary"></div><div id="list"></div></main>
+<button class="primary" onclick="openForm()">＋ New Job</button>
+<div class="modal" id="modal"><div class="sheet">
+<h2>New / Edit Job</h2><input type="hidden" id="editId">
+<div class="section">Quick Paste</div><textarea id="raw" rows="8" placeholder="Paste your normal job notes here..."></textarea>
+<div class="hint">Paste the whole job exactly as you normally write it, then tap Parse Text.</div>
+<button class="small" onclick="parseRaw()">Parse Text</button><hr>
+<label>Job #</label><input id="jobNo"><label>Customer</label><input id="customer"><label>Address</label><input id="address"><label>Phone</label><input id="phone">
+<div class="row"><div><label>Appliance</label><input id="appliance"></div><div><label>Brand</label><input id="brand"></div></div>
+<label>Model</label><input id="model"><label>Problem</label><textarea id="problem" rows="2"></textarea><label>Diagnosis / Repair</label><textarea id="diagnosis" rows="2"></textarea>
+<label>Parts</label><input id="parts">
+<div class="row"><div><label>Part Cost ($)</label><input id="partCost" type="number" step="0.01"></div><div><label>Total Job ($)</label><input id="total" type="number" step="0.01"></div></div>
+<div class="row"><div><label>Deposit ($)</label><input id="deposit" type="number" step="0.01"></div><div><label>Payment ($)</label><input id="payment" type="number" step="0.01"></div></div>
+<div class="row"><div><label>Payment Method</label><input id="paymentMethod" placeholder="Check / Cash / Card"></div><div><label>Tip ($)</label><input id="tip" type="number" step="0.01"></div></div>
+<label>Status</label><select id="status"><option>New</option><option>In Progress</option><option>Waiting Part</option><option>Follow-up</option><option>Completed</option><option>Cancelled</option></select>
+<div class="row"><div><label>Visit Date</label><input id="visitDate" type="date"></div><div><label>Part Waiting From</label><input id="partDate" type="date"></div></div>
+<label>Visit Time</label><input id="visitTime" placeholder="e.g. 9:03 @ 11-1"><label>Notes</label><textarea id="notes" rows="2"></textarea>
+<button class="small" onclick="saveJob()">Save Job</button><button class="small" onclick="closeForm()">Cancel</button>
+</div></div>
+<script>
+let jobs=JSON.parse(localStorage.getItem("myJobsPWA")||"[]"),filter="all";const $=id=>document.getElementById(id),today=()=>new Date().toISOString().slice(0,10);
+const fields=["editId","raw","jobNo","customer","address","phone","appliance","brand","model","problem","diagnosis","parts","partCost","total","deposit","payment","paymentMethod","tip","visitDate","partDate","visitTime","notes"];
+function persist(){localStorage.setItem("myJobsPWA",JSON.stringify(jobs));render()}
+function money(s){let m=String(s||"").match(/\$?\s*([0-9]+(?:\.[0-9]+)?)/);return m?parseFloat(m[1]):0}
+function openForm(j=null){$("modal").style.display="flex";fields.forEach(x=>$(x).value="");$("status").value="New";$("visitDate").value=today();if(j){Object.keys(j).forEach(k=>$(k)&&($(k).value=j[k]??""));$("editId").value=j.id}}
+function closeForm(){$("modal").style.display="none"}
+function parseRaw(){
+ let t=$("raw").value,lines=t.split(/\n+/).map(x=>x.trim()).filter(Boolean),all=t.replace(/\r/g," ");
+ if(lines[0])$("jobNo").value=(lines[0].match(/^\d+/)||[""])[0];
+ let tm=lines.find(x=>/^\d{1,2}\.\d{1,2}@/i.test(x));if(tm)$("visitTime").value=tm;
+ let addr=lines.find(x=>/\b(MA|Massachusetts)\b/i.test(x)&&/\d{5}/.test(x));if(addr)$("address").value=addr;
+ let pi=lines.find(x=>/\+?1?[\s().-]*\d{3}[\s().-]*\d{3}[\s.-]*\d{4}/.test(x));if(pi)$("phone").value=(pi.match(/\+?1?[\s().-]*\d{3}[\s().-]*\d{3}[\s.-]*\d{4}/)||[""])[0];
+ let ai=addr?lines.indexOf(addr):-1;if(ai>=0&&lines[ai+1]&&!/^(\+?\d|Name:)/i.test(lines[ai+1]))$("customer").value=lines[ai+1];
+ let nm=lines.find(x=>/^Name:\s*/i.test(x));if(nm)$("customer").value=nm.replace(/^Name:\s*/i,"").trim();
+ let sc=lines.find(x=>/\bsc\b/i.test(x)&&/\d/.test(x));if(sc)$("notes").value="Service Call: $"+money(sc);
+ let ap=lines.find(x=>/\b(wm|washer|dryer|dishwasher|refrigerator|fridge|oven|stove|stove top|range|rf)\b/i.test(x)&&/samsung|lg|ge|whirlpool|maytag|bosch|electrolux|frigidaire|kenmore/i.test(x));
+ if(ap){let b=(ap.match(/samsung|lg|ge|whirlpool|maytag|bosch|electrolux|frigidaire|kenmore/i)||[""])[0];$("brand").value=b.charAt(0).toUpperCase()+b.slice(1).toLowerCase();
+ $("appliance").value=/\b(wm|washer)\b/i.test(ap)?"Washer":/\bdryer\b/i.test(ap)?"Dryer":/\b(stove|stove top|range)\b/i.test(ap)?"Stove":/\b(rf|refrigerator|fridge)\b/i.test(ap)?"Refrigerator":"";$("problem").value=ap.replace(/samsung|lg|ge|whirlpool|maytag|bosch|electrolux|frigidaire|kenmore/ig,"").replace(/\b(wm|washer|dryer|dishwasher|refrigerator|fridge|oven|stove|stove top|range|rf)\b/ig,"").trim()}
+ let rep=lines.find(x=>/(suspension|bearing|pump|element|igniter|motor|valve|sensor|wire|cable|fan|compressor)/i.test(x));if(rep)$("diagnosis").value=rep.replace(/^[-–]\s*/,"");
+ let repair=lines.find(x=>/(suspension|sensor|wire|cable|fan|repair|replace|replacement|temperature)/i.test(x)&&/\d+\s*dollar/i.test(x));
+ if(!repair)repair=lines.find(x=>/^\s*\d+(?:\.\d+)?\s*dollar/i.test(x)&&!/(deposit|tip|sc|service call)/i.test(x));if(repair)$("total").value=money(repair);
+ let dep=lines.find(x=>/deposit/i.test(x)&&/\d/.test(x));if(dep)$("deposit").value=money(dep);
+ let tip=lines.find(x=>/\btip\b/i.test(x)&&/\d/.test(x));if(tip)$("tip").value=money(tip);
+ let pay=lines.find(x=>/(paid|total|job\s*finish|job\s*finished)/i.test(x)&&/\d/.test(x)&&!/(deposit|sc\b)/i.test(x));if(pay)$("payment").value=money(pay);
+ let meth=all.match(/\b(check|cash|credit\s*card|card|venmo|zelle)\b/i);if(meth)$("paymentMethod").value=meth[1];
+ $("visitDate").value=today();
+ if(/waiting\s*(for)?\s*part|waiting\s*part/i.test(all)){$("status").value="Waiting Part";$("partDate").value=today()}
+ else if(/job\s*finish|job\s*finished|completed|complete/i.test(all))$("status").value="Completed";
+ else if(/deposit/i.test(all))$("status").value="In Progress";
+}
+function profit(j){let total=+j.total||0,part=+j.partCost||0;return {total,part,remain:Math.max(0,total-part),profit:Math.max(0,total-part)*.4}}
+function days(j){if(j.status!=="Waiting Part"||!j.partDate)return 0;return Math.max(0,Math.floor((Date.now()-new Date(j.partDate+"T00:00:00"))/86400000))}
+function saveJob(){let id=$("editId").value||Date.now().toString(),old=jobs.find(x=>x.id===id),j={id};fields.slice(1).forEach(x=>j[x]=$(x).value);j.status=$("status").value;j.created=old?.created||new Date().toISOString();j.updated=new Date().toISOString();if(j.status==="Waiting Part"&&!j.partDate)j.partDate=today();let i=jobs.findIndex(x=>x.id===id);i>=0?jobs[i]=j:jobs.unshift(j);persist();closeForm()}
+function complete(id){let j=jobs.find(x=>x.id===id);if(j){j.status="Completed";j.updated=new Date().toISOString();persist()}}
+function del(id){if(confirm("Delete this job?")){jobs=jobs.filter(x=>x.id!==id);persist()}}
+function esc(s){return String(s||"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]))}
+function render(){
+ let a=jobs.filter(j=>filter==="all"||filter==="today"&&j.updated?.slice(0,10)===today()||filter==="open"&&!["Completed","Cancelled"].includes(j.status)||filter==="waiting"&&j.status==="Waiting Part"||filter==="completed"&&j.status==="Completed");
+ let total=a.reduce((x,j)=>x+profit(j).profit,0),done=a.filter(j=>j.status==="Completed").length,wait=a.filter(j=>j.status==="Waiting Part").length;
+ $("summary").innerHTML=`<div>Jobs<br><b>${a.length}</b></div><div>Completed<br><b>${done}</b></div><div>Parts Waiting<br><b>${wait}</b></div><div>My Earnings<br><b>$${total.toFixed(2)}</b></div>`;
+ a.sort((x,y)=>filter==="waiting"?days(y)-days(x):new Date(y.updated)-new Date(x.updated));
+ $("list").innerHTML=a.length?a.map(j=>{let p=profit(j),d=days(j);return `<div class="card"><div class="title">${esc(j.jobNo?"#"+j.jobNo+" — ":"")}${esc(j.customer)||"No customer"} ${j.appliance?"— "+esc(j.appliance):""}</div><div class="muted">${esc(j.address)}<br>${esc(j.brand)} ${esc(j.model)} ${j.problem?"• "+esc(j.problem):""}</div><span class="badge">${esc(j.status)}</span>${j.status==="Waiting Part"?`<div class="wait">📦 Waiting ${d} day${d===1?"":"s"} • Since ${esc(j.partDate)}</div>`:""}<div class="money">Total: <b>$${p.total.toFixed(2)}</b> • Part: <b>$${p.part.toFixed(2)}</b><br>After Part: <b>$${p.remain.toFixed(2)}</b> • <span class="profit">My 40%: $${p.profit.toFixed(2)}</span></div><button class="small" onclick='openForm(${JSON.stringify(j).replace(/'/g,"&#39;")})'>Edit</button>${j.status!=="Completed"?`<button class="small" onclick="complete('${j.id}')">Complete</button>`:""}<button class="small" onclick="del('${j.id}')">Delete</button></div>`}).join(""):"<div class='empty'>No jobs here yet.</div>";
+}
+document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));b.classList.add("active");filter=b.dataset.filter;render()});render();
+</script></body></html>
