@@ -34,21 +34,24 @@ hr{border:0;border-top:1px solid #ddd;margin:14px 0}.empty{text-align:center;col
  <div id="actErr" class="error"></div><button id="activate" class="small dark">Activate</button></div>
 </div>
 
-<header><span>My Jobs</span><small id="who"></small></header>
+<header><span>My Jobs V2</span><small id="who"></small></header>
 <div class="tabs">
 <button class="tab active" data-f="all">All</button><button class="tab" data-f="today">Today</button>
-<button class="tab" data-f="open">Incomplete</button><button class="tab" data-f="waiting">Parts Waiting</button>
+<button class="tab" data-f="open">Incomplete</button><button class="tab" data-f="progress">In Progress</button><button class="tab" data-f="followup">Follow-up</button><button class="tab" data-f="waiting">Parts Waiting</button>
 <button class="tab" data-f="completed">Completed</button>
 </div>
 <main>
 <section class="tools">
-<h3>Search & Week</h3><input id="search" placeholder="Search job #, customer, address, phone, appliance, problem...">
+<h3>Search & Settings</h3><input id="search" placeholder="Search jobs...">
 <div class="settingsGrid">
 <div><label>Business Name</label><input id="biz"></div><div><label>Technician %</label><input id="pct" type="number" min="0" max="100" step=".1"></div>
+<div class="wide"><label>AI Backend URL</label><input id="endpoint" placeholder="Add later when Cloudflare AI backend is ready"></div>
 </div>
 <div class="btnrow"><button class="small" id="saveSettings">Save Settings</button><button class="small" id="export">Export XLS</button><button class="small dark" id="aiOpen">AI Assistant</button></div>
+<div class="notice">V2 uses separate local storage. Your old My Jobs data is not overwritten.</div>
 </section>
 <div id="summary" class="summary"></div><div id="list"></div>
+<section class="tools"><h3>Weekly Report</h3><div id="weeklyReport"></div></section>
 </main>
 <button class="primary" id="newJob">+ New Job</button>
 
@@ -82,6 +85,8 @@ hr{border:0;border-top:1px solid #ddd;margin:14px 0}.empty{text-align:center;col
 <script>
 const $=id=>document.getElementById(id), K="myJobsV2", OLD="myJobsPWA";
 const today=()=>new Date().toISOString().slice(0,10);
+function weekRange(s=today()){let d=new Date(s+"T00:00:00"),day=d.getDay(),m=new Date(d);m.setDate(d.getDate()+(day===0?-6:1-day));let e=new Date(m);e.setDate(m.getDate()+6);return[m.toISOString().slice(0,10),e.toISOString().slice(0,10)]}
+function inRange(d,s,e){return d&&d>=s&&d<=e}
 let jobs=[], filter="all", imageData=null;
 function load(){
  try{
@@ -91,6 +96,7 @@ function load(){
  }catch(e){jobs=[]}
  $("biz").value=localStorage.getItem("myJobsV2Business")||"";
  $("pct").value=localStorage.getItem("myJobsV2TechPercent")||"40";
+ $("endpoint").value=localStorage.getItem("myJobsV2AIEndpoint")||"";
  $("who").textContent=localStorage.getItem("myJobsV2Business")||"";
  if(localStorage.getItem("myJobsV2Activated")==="1") $("gate").style.display="none";
  render(); renderChat();
@@ -113,9 +119,35 @@ function openJob(j){
  fields.forEach(k=>$(k).value=j?.[k]??""); $("status").value=j?.status||"New"; if(!j)$("visitDate").value=today();
 }
 $("newJob").onclick=()=>openJob(); $("cancelJob").onclick=()=>$("jobModal").style.display="none";
+let savingJob=false;
 $("saveJob").onclick=()=>{
- let id=$("editId").value||String(Date.now()), j={id,status:$("status").value,updated:new Date().toISOString()};
- fields.forEach(k=>j[k]=$(k).value); let i=jobs.findIndex(x=>x.id===id); if(i>=0)jobs[i]=j;else jobs.unshift(j); save(); $("jobModal").style.display="none";
+ if(savingJob)return;
+ savingJob=true;
+ const btn=$("saveJob");btn.disabled=true;
+ try{
+   let id=$("editId").value.trim();
+   let isEdit=!!id;
+   if(!id) id=(crypto.randomUUID?crypto.randomUUID():(Date.now()+"-"+Math.random().toString(36).slice(2)));
+   let j={id,status:$("status").value,updated:new Date().toISOString()};
+   fields.forEach(k=>j[k]=$(k).value);
+   let i=jobs.findIndex(x=>String(x.id)===String(id));
+   if(i>=0){
+     jobs[i]={...jobs[i],...j,id:jobs[i].id};
+   }else if(isEdit){
+     // If an edited record cannot be found, do not create a duplicate.
+     alert("This job could not be found. Please reopen it and try again.");
+     return;
+   }else{
+     // Guard against an accidental double-create with the same visible job number.
+     let recent=jobs.findIndex(x=>j.jobNo&&x.jobNo===j.jobNo&&x.customer===j.customer&&x.visitDate===j.visitDate);
+     if(recent>=0) jobs[recent]={...jobs[recent],...j,id:jobs[recent].id};
+     else jobs.unshift(j);
+   }
+   save();
+   $("jobModal").style.display="none";
+ }finally{
+   setTimeout(()=>{savingJob=false;btn.disabled=false},350);
+ }
 };
 $("parse").onclick=()=>{
  let t=$("raw").value,ls=t.split(/\n+/).map(x=>x.trim()).filter(Boolean);
@@ -128,18 +160,28 @@ $("parse").onclick=()=>{
  let br=t.match(/\b(LG|Samsung|GE|Whirlpool|Maytag|Bosch|Frigidaire|Electrolux|Kenmore|KitchenAid)\b/i);if(br)$("brand").value=br[0];
 };
 function render(){
- let q=$("search").value.toLowerCase().trim(), a=jobs.filter(j=>{
-  let ok=filter==="all"||(filter==="today"&&j.visitDate===today())||(filter==="open"&&!["Completed","Cancelled"].includes(j.status))||(filter==="waiting"&&j.status==="Waiting Part")||(filter==="completed"&&j.status==="Completed");
-  return ok&&(!q||Object.values(j).join(" ").toLowerCase().includes(q));
+ let q=$("search").value.toLowerCase().trim(),ws=$("weekStart").value,we=$("weekEnd").value, a=jobs.filter(j=>{
+  let ok=filter==="all"||(filter==="today"&&j.visitDate===today())||(filter==="open"&&!["Completed","Cancelled"].includes(j.status))||(filter==="progress"&&j.status==="In Progress")||(filter==="followup"&&j.status==="Follow-up")||(filter==="waiting"&&j.status==="Waiting Part")||(filter==="completed"&&j.status==="Completed");
+  return ok&&(!q||Object.values(j).join(" ").toLowerCase().includes(q))&&(!ws||inRange(j.visitDate,ws,we));
  });
  let e=a.reduce((n,j)=>n+calc(j).e,0);
  $("summary").innerHTML=`<div>Jobs<br><b>${a.length}</b></div><div>Completed<br><b>${a.filter(j=>j.status==="Completed").length}</b></div><div>Parts Waiting<br><b>${a.filter(j=>j.status==="Waiting Part").length}</b></div><div>My Earnings<br><b>$${e.toFixed(2)}</b></div>`;
  a.sort((x,y)=>String(y.visitDate||y.updated||"").localeCompare(String(x.visitDate||x.updated||"")));
  $("list").innerHTML=a.length?a.map(j=>{let c=calc(j);return `<div class="card" data-id="${esc(j.id)}"><div class="title">${j.jobNo?"#"+esc(j.jobNo)+" â ":""}${esc(j.customer)||"No customer"} ${j.appliance?"â "+esc(j.appliance):""}</div><div class="muted">${esc(j.visitDate||"")} ${j.visitTime?"â¢ "+esc(j.visitTime):""}<br>${esc(j.address)}<br>${esc(j.brand)} ${esc(j.model)} ${j.problem?"â¢ "+esc(j.problem):""}</div><span class="badge">${esc(j.status)}</span><div class="money">Total: <b>$${c.t.toFixed(2)}</b> â¢ Parts: <b>$${c.p.toFixed(2)}</b><br>After Parts: <b>$${c.r.toFixed(2)}</b> â¢ <span class="profit">My ${pct()}%: $${c.e.toFixed(2)}</span></div><div class="btnrow"><button class="small edit">Edit</button>${j.status!=="Completed"?'<button class="small complete">Complete</button>':""}<button class="small del">Delete</button></div></div>`}).join(""):`<div class="empty">No jobs here yet.</div>`;
  document.querySelectorAll(".card[data-id]").forEach(el=>{let id=el.dataset.id,j=jobs.find(x=>x.id===id);el.querySelector(".edit").onclick=()=>openJob(j);let c=el.querySelector(".complete");if(c)c.onclick=()=>{j.status="Completed";save()};el.querySelector(".del").onclick=()=>{if(confirm("Delete this job?")){jobs=jobs.filter(x=>x.id!==id);save()}}});
+ renderWeekly();
 }
+function renderWeekly(){
+ let groups={};
+ jobs.forEach(j=>{if(!j.visitDate)return;let [s,e]=weekRange(j.visitDate);(groups[s]??={s,e,jobs:[]}).jobs.push(j)});
+ let arr=Object.values(groups).sort((a,b)=>b.s.localeCompare(a.s));
+ $("weeklyReport").innerHTML=arr.length?arr.map(w=>{let total=w.jobs.reduce((n,j)=>n+calc(j).t,0),parts=w.jobs.reduce((n,j)=>n+calc(j).p,0),earn=w.jobs.reduce((n,j)=>n+calc(j).e,0);return `<div class="card"><div class="title">${esc(w.s)} â ${esc(w.e)}</div><div class="money">Jobs: <b>${w.jobs.length}</b><br>Total Job: <b>$${total.toFixed(2)}</b><br>Part Cost: <b>$${parts.toFixed(2)}</b><br>My ${pct()}%: <b>$${earn.toFixed(2)}</b></div></div>`}).join(""):`<div class="empty">No weekly data yet.</div>`;
+}
+$("weekStart").onchange=()=>{let s=$("weekStart").value;if(s){let [,e]=weekRange(s);$("weekEnd").value=e}render()};
+$("thisWeek").onclick=()=>{let [s,e]=weekRange();$("weekStart").value=s;$("weekEnd").value=e;render()};
+$("clearWeek").onclick=()=>{$("weekStart").value="";$("weekEnd").value="";$("search").value="";render()};
 $("search").oninput=render;document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{filter=b.dataset.f;document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));b.classList.add("active");render()});
-$("saveSettings").onclick=()=>{let p=Math.max(0,Math.min(100,parseFloat($("pct").value)||0));localStorage.setItem("myJobsV2Business",$("biz").value.trim());localStorage.setItem("myJobsV2TechPercent",String(p));$("who").textContent=$("biz").value.trim();render();alert("Settings saved.")};
+$("saveSettings").onclick=()=>{let p=Math.max(0,Math.min(100,parseFloat($("pct").value)||0));localStorage.setItem("myJobsV2Business",$("biz").value.trim());localStorage.setItem("myJobsV2TechPercent",String(p));localStorage.setItem("myJobsV2AIEndpoint",$("endpoint").value.trim());$("who").textContent=$("biz").value.trim();render();alert("Settings saved.")};
 $("export").onclick=()=>{let rows=jobs.map(j=>{let c=calc(j);return `<tr><td>${esc(j.jobNo)}</td><td>${esc(j.visitDate)}</td><td>${esc(j.customer)}</td><td>${esc(j.address)}</td><td>${esc(j.phone)}</td><td>${esc(j.appliance)}</td><td>${esc(j.brand)}</td><td>${esc(j.model)}</td><td>${esc(j.problem)}</td><td>${esc(j.parts)}</td><td>${c.p}</td><td>${c.t}</td><td>${esc(j.status)}</td><td>${c.e.toFixed(2)}</td></tr>`}).join("");let h=`<table border=1><tr><th>Job</th><th>Date</th><th>Customer</th><th>Address</th><th>Phone</th><th>Appliance</th><th>Brand</th><th>Model</th><th>Problem</th><th>Parts</th><th>Part Cost</th><th>Total</th><th>Status</th><th>Earnings</th></tr>${rows}</table>`;let u=URL.createObjectURL(new Blob([h],{type:"application/vnd.ms-excel"})),a=document.createElement("a");a.href=u;a.download="My_Jobs_V2.xls";a.click();setTimeout(()=>URL.revokeObjectURL(u),1000)};
 function getChat(){try{return JSON.parse(localStorage.getItem("myJobsV2AIChat")||"[]")}catch(e){return[]}}
 function setChat(x){localStorage.setItem("myJobsV2AIChat",JSON.stringify(x.slice(-50)))}
@@ -151,7 +193,7 @@ $("photo").onchange=()=>{let f=$("photo").files[0];if(!f){imageData=null;$("prev
 $("sendAI").onclick=async()=>{
  let q=$("question").value.trim();if(!q)return;addMsg("user",q);$("question").value="";
  let ep=(localStorage.getItem("myJobsV2AIEndpoint")||"").trim();
- if(!ep){addMsg("assistant","AI Assistant is not connected yet. It will work after the AI service is connected.");$("aiStatus").textContent="AI not connected yet.";return}
+ if(!ep){addMsg("assistant","AI backend is not connected yet. Add the AI Backend URL in Settings after the Cloudflare backend is ready.");$("aiStatus").textContent="No backend connected.";return}
  $("aiStatus").textContent="Thinking...";
  try{let r=await fetch(ep,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({question:q,model:"gpt-5.6-sol",jobs,today:today(),image:imageData,messages:getChat().slice(-12)})});let d=await r.json();if(!r.ok)throw Error(d.error||("HTTP "+r.status));addMsg("assistant",d.answer||d.output_text||"No answer returned.");$("aiStatus").textContent="Done.";imageData=null;$("photo").value="";$("preview").style.display="none"}catch(e){addMsg("assistant","Backend error: "+e.message);$("aiStatus").textContent="Error."}
 };
