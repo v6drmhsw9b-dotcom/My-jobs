@@ -1,1 +1,163 @@
-V2
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#111111">
+<title>My Jobs V2</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f4f4f6;color:#111;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+header{padding:18px 16px 8px;font-size:27px;font-weight:850;display:flex;justify-content:space-between;align-items:center}
+header small{font-size:13px;color:#666;font-weight:700}.tabs{display:flex;gap:7px;padding:8px 12px;overflow:auto}
+button{font:inherit}.tab,.small{border:0;border-radius:12px;padding:10px 13px;background:#e6e6ea;font-weight:750}.tab{border-radius:20px;white-space:nowrap}.tab.active,.dark{background:#111!important;color:#fff}
+main{padding:6px 12px 105px}.card,.tools,.summary{background:#fff;border-radius:17px;margin:10px 0;padding:14px;box-shadow:0 1px 5px #00000012}
+.summary{display:grid;grid-template-columns:1fr 1fr;gap:10px}.summary b{font-size:21px}.title{font-size:18px;font-weight:850}.muted{color:#666;font-size:14px;line-height:1.45;margin-top:5px}
+.badge{display:inline-block;margin-top:9px;padding:5px 9px;border-radius:10px;background:#eee;font-size:12px;font-weight:800}
+.money{margin-top:10px;line-height:1.55}.profit{font-size:18px;font-weight:850}.row{display:flex;gap:8px}.row>*{flex:1}
+input,textarea,select{width:100%;padding:12px;border:1px solid #d8d8dc;border-radius:11px;margin:6px 0 12px;font-size:16px;background:#fff}
+label{font-size:13px;font-weight:800}.btnrow{display:flex;gap:7px;flex-wrap:wrap}.btnrow button{flex:1;min-width:110px}
+.primary{position:fixed;right:18px;bottom:20px;border:0;border-radius:28px;padding:15px 20px;background:#111;color:#fff;font-weight:850;box-shadow:0 5px 20px #0003}
+.modal{position:fixed;inset:0;background:#0007;display:none;align-items:flex-end;z-index:20}.sheet{background:#f4f4f6;border-radius:22px 22px 0 0;width:100%;max-height:94vh;overflow:auto;padding:18px 16px 32px}
+.overlay{position:fixed;inset:0;background:#f4f4f6;z-index:50;display:flex;align-items:center;justify-content:center;padding:20px}.activate{width:min(100%,430px);background:#fff;border-radius:24px;padding:24px;box-shadow:0 10px 35px #0002}
+.activate h1{margin:0 0 8px}.error{color:#b00020;font-size:13px;font-weight:700}.notice{font-size:12px;color:#666}.chat{height:330px;overflow:auto;background:#fff;border-radius:15px;padding:10px;margin:10px 0}
+.msg{max-width:86%;padding:10px 12px;border-radius:14px;margin:7px 0;white-space:pre-wrap}.me{margin-left:auto;background:#111;color:#fff}.bot{background:#e9e9ed}
+.preview{max-width:130px;max-height:130px;border-radius:12px;display:none}.quick{display:flex;gap:6px;overflow:auto;margin:8px 0}.quick button{white-space:nowrap;border:0;border-radius:15px;padding:8px 10px;background:#e7e7eb;font-size:13px;font-weight:700}
+.settingsGrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.settingsGrid .wide{grid-column:1/-1}
+hr{border:0;border-top:1px solid #ddd;margin:14px 0}.empty{text-align:center;color:#777;padding:35px 8px}
+</style>
+</head>
+<body>
+<div id="gate" class="overlay">
+ <div class="activate"><h1>My Jobs V2</h1><p class="muted">User / Business activation</p>
+ <label>User / Business Name</label><input id="actName" placeholder="Your name or business">
+ <label>Activation Code</label><input id="actCode" placeholder="Activation code" autocapitalize="characters">
+ <div id="actErr" class="error"></div><button id="activate" class="small dark">Activate</button></div>
+</div>
+
+<header><span>My Jobs V2</span><small id="who"></small></header>
+<div class="tabs">
+<button class="tab active" data-f="all">All</button><button class="tab" data-f="today">Today</button>
+<button class="tab" data-f="open">Incomplete</button><button class="tab" data-f="waiting">Parts Waiting</button>
+<button class="tab" data-f="completed">Completed</button>
+</div>
+<main>
+<section class="tools">
+<h3>Search & Settings</h3><input id="search" placeholder="Search jobs...">
+<div class="settingsGrid">
+<div><label>Business Name</label><input id="biz"></div><div><label>Technician %</label><input id="pct" type="number" min="0" max="100" step=".1"></div>
+<div class="wide"><label>AI Backend URL</label><input id="endpoint" placeholder="Add later when Cloudflare AI backend is ready"></div>
+</div>
+<div class="btnrow"><button class="small" id="saveSettings">Save Settings</button><button class="small" id="export">Export XLS</button><button class="small dark" id="aiOpen">AI Assistant</button></div>
+<div class="notice">V2 uses separate local storage. Your old My Jobs data is not overwritten.</div>
+</section>
+<div id="summary" class="summary"></div><div id="list"></div>
+</main>
+<button class="primary" id="newJob">ï¼ New Job</button>
+
+<div class="modal" id="jobModal"><div class="sheet">
+<h2>New / Edit Job</h2><input type="hidden" id="editId">
+<label>Quick Paste</label><textarea id="raw" rows="5" placeholder="Paste job notes"></textarea><button class="small" id="parse">Parse Text</button><hr>
+<label>Job #</label><input id="jobNo"><label>Customer</label><input id="customer"><label>Address</label><input id="address"><label>Phone</label><input id="phone">
+<div class="row"><div><label>Service Call $</label><input id="sc" type="number" step=".01"></div><div><label>Appliance</label><input id="appliance"></div></div>
+<div class="row"><div><label>Brand</label><input id="brand"></div><div><label>Model</label><input id="model"></div></div>
+<label>Problem</label><textarea id="problem" rows="2"></textarea><label>Diagnosis / Repair</label><textarea id="diagnosis" rows="2"></textarea>
+<label>Parts</label><textarea id="parts" rows="2"></textarea>
+<div class="row"><div><label>Part Cost $</label><input id="partCost" type="number" step=".01"></div><div><label>Total Job $</label><input id="total" type="number" step=".01"></div></div>
+<div class="row"><div><label>Deposit $</label><input id="deposit" type="number" step=".01"></div><div><label>Payment $</label><input id="payment" type="number" step=".01"></div></div>
+<div class="row"><div><label>Payment Method</label><input id="paymentMethod"></div><div><label>Tip $</label><input id="tip" type="number" step=".01"></div></div>
+<label>Status</label><select id="status"><option>New</option><option>In Progress</option><option>Waiting Part</option><option>Follow-up</option><option>Completed</option><option>Cancelled</option></select>
+<div class="row"><div><label>Visit Date</label><input id="visitDate" type="date"></div><div><label>Part Waiting From</label><input id="partDate" type="date"></div></div>
+<label>Visit Time</label><input id="visitTime" placeholder="e.g. 2-4 pm"><label>Notes</label><textarea id="notes" rows="2"></textarea>
+<div class="btnrow"><button class="small dark" id="saveJob">Save Job</button><button class="small" id="cancelJob">Cancel</button></div>
+</div></div>
+
+<div class="modal" id="aiModal"><div class="sheet">
+<h2>AI Appliance Assistant</h2>
+<div class="quick"><button data-q="Diagnose this appliance problem: ">Diagnose</button><button data-q="Identify this part: ">Part ID</button><button data-q="Explain this error code: ">Error Code</button><button data-q="Give repair steps for: ">Repair Steps</button><button data-q="Estimate a reasonable repair price for: ">Price Estimate</button></div>
+<div id="chat" class="chat"></div>
+<label>Attach Picture</label><input id="photo" type="file" accept="image/*" capture="environment"><img id="preview" class="preview">
+<textarea id="question" rows="3" placeholder="Ask a diagnostic or repair question..."></textarea>
+<div class="btnrow"><button class="small dark" id="sendAI">Send</button><button class="small" id="closeAI">Close</button><button class="small" id="clearChat">Clear Chat</button></div>
+<div id="aiStatus" class="notice"></div>
+</div></div>
+
+<script>
+const $=id=>document.getElementById(id), K="myJobsV2", OLD="myJobsPWA";
+const today=()=>new Date().toISOString().slice(0,10);
+let jobs=[], filter="all", imageData=null;
+function load(){
+ try{
+   let v=localStorage.getItem(K);
+   if(v===null){let old=localStorage.getItem(OLD); jobs=old?JSON.parse(old):[]; localStorage.setItem(K,JSON.stringify(jobs))}
+   else jobs=JSON.parse(v)||[];
+ }catch(e){jobs=[]}
+ $("biz").value=localStorage.getItem("myJobsV2Business")||"";
+ $("pct").value=localStorage.getItem("myJobsV2TechPercent")||"40";
+ $("endpoint").value=localStorage.getItem("myJobsV2AIEndpoint")||"";
+ $("who").textContent=localStorage.getItem("myJobsV2Business")||"";
+ if(localStorage.getItem("myJobsV2Activated")==="1") $("gate").style.display="none";
+ render(); renderChat();
+}
+async function hash(s){let b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(s));return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join("")}
+$("activate").onclick=async()=>{
+ let n=$("actName").value.trim(), c=$("actCode").value.trim().toUpperCase();
+ if(!n){$("actErr").textContent="Enter your name or business.";return}
+ let h=await hash(c);
+ if(h!=="b41482949424b1f5b7307c6871bc6d53df4561710e39e29438da1e2b3ed749de"){$("actErr").textContent="Activation code is not valid.";return}
+ localStorage.setItem("myJobsV2Activated","1");localStorage.setItem("myJobsV2Business",n);$("biz").value=n;$("who").textContent=n;$("gate").style.display="none";
+};
+function pct(){let n=parseFloat(localStorage.getItem("myJobsV2TechPercent")||"40");return isFinite(n)?n:40}
+function calc(j){let t=+j.total||0,p=+j.partCost||0,r=Math.max(0,t-p);return {t,p,r,e:r*pct()/100}}
+function esc(s){return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]))}
+function save(){localStorage.setItem(K,JSON.stringify(jobs));render()}
+const fields=["jobNo","customer","address","phone","sc","appliance","brand","model","problem","diagnosis","parts","partCost","total","deposit","payment","paymentMethod","tip","visitDate","partDate","visitTime","notes"];
+function openJob(j){
+ $("jobModal").style.display="flex"; $("editId").value=j?.id||""; $("raw").value="";
+ fields.forEach(k=>$(k).value=j?.[k]??""); $("status").value=j?.status||"New"; if(!j)$("visitDate").value=today();
+}
+$("newJob").onclick=()=>openJob(); $("cancelJob").onclick=()=>$("jobModal").style.display="none";
+$("saveJob").onclick=()=>{
+ let id=$("editId").value||String(Date.now()), j={id,status:$("status").value,updated:new Date().toISOString()};
+ fields.forEach(k=>j[k]=$(k).value); let i=jobs.findIndex(x=>x.id===id); if(i>=0)jobs[i]=j;else jobs.unshift(j); save(); $("jobModal").style.display="none";
+};
+$("parse").onclick=()=>{
+ let t=$("raw").value,ls=t.split(/\n+/).map(x=>x.trim()).filter(Boolean);
+ if(ls[0])$("jobNo").value=(ls[0].match(/^\d+/)||[""])[0];
+ let a=ls.find(x=>/\bMA\b/i.test(x)&&/\d{5}/.test(x)); if(a)$("address").value=a;
+ let ph=t.match(/\+?1?[\s().-]*\d{3}[\s().-]*\d{3}[\s.-]*\d{4}/); if(ph)$("phone").value=ph[0];
+ let sc=t.match(/\bsc\s*\$?\s*(\d+(?:\.\d+)?)/i);if(sc)$("sc").value=sc[1];
+ let d=t.match(/(\d{1,2})[.\/-](\d{1,2})\s*@\s*([^\n]+)/);if(d){$("visitDate").value=`${new Date().getFullYear()}-${String(+d[1]).padStart(2,"0")}-${String(+d[2]).padStart(2,"0")}`;$("visitTime").value=d[3].trim()}
+ let ap=t.match(/(dishwasher|washer|dryer|refrigerator|fridge|oven|range|stove|\bdw\b|\bwm\b|\brf\b)/i);if(ap)$("appliance").value=ap[0];
+ let br=t.match(/\b(LG|Samsung|GE|Whirlpool|Maytag|Bosch|Frigidaire|Electrolux|Kenmore|KitchenAid)\b/i);if(br)$("brand").value=br[0];
+};
+function render(){
+ let q=$("search").value.toLowerCase().trim(), a=jobs.filter(j=>{
+  let ok=filter==="all"||(filter==="today"&&j.visitDate===today())||(filter==="open"&&!["Completed","Cancelled"].includes(j.status))||(filter==="waiting"&&j.status==="Waiting Part")||(filter==="completed"&&j.status==="Completed");
+  return ok&&(!q||Object.values(j).join(" ").toLowerCase().includes(q));
+ });
+ let e=a.reduce((n,j)=>n+calc(j).e,0);
+ $("summary").innerHTML=`<div>Jobs<br><b>${a.length}</b></div><div>Completed<br><b>${a.filter(j=>j.status==="Completed").length}</b></div><div>Parts Waiting<br><b>${a.filter(j=>j.status==="Waiting Part").length}</b></div><div>My Earnings<br><b>$${e.toFixed(2)}</b></div>`;
+ a.sort((x,y)=>String(y.visitDate||y.updated||"").localeCompare(String(x.visitDate||x.updated||"")));
+ $("list").innerHTML=a.length?a.map(j=>{let c=calc(j);return `<div class="card" data-id="${esc(j.id)}"><div class="title">${j.jobNo?"#"+esc(j.jobNo)+" â ":""}${esc(j.customer)||"No customer"} ${j.appliance?"â "+esc(j.appliance):""}</div><div class="muted">${esc(j.visitDate||"")} ${j.visitTime?"â¢ "+esc(j.visitTime):""}<br>${esc(j.address)}<br>${esc(j.brand)} ${esc(j.model)} ${j.problem?"â¢ "+esc(j.problem):""}</div><span class="badge">${esc(j.status)}</span><div class="money">Total: <b>$${c.t.toFixed(2)}</b> â¢ Parts: <b>$${c.p.toFixed(2)}</b><br>After Parts: <b>$${c.r.toFixed(2)}</b> â¢ <span class="profit">My ${pct()}%: $${c.e.toFixed(2)}</span></div><div class="btnrow"><button class="small edit">Edit</button>${j.status!=="Completed"?'<button class="small complete">Complete</button>':""}<button class="small del">Delete</button></div></div>`}).join(""):`<div class="empty">No jobs here yet.</div>`;
+ document.querySelectorAll(".card[data-id]").forEach(el=>{let id=el.dataset.id,j=jobs.find(x=>x.id===id);el.querySelector(".edit").onclick=()=>openJob(j);let c=el.querySelector(".complete");if(c)c.onclick=()=>{j.status="Completed";save()};el.querySelector(".del").onclick=()=>{if(confirm("Delete this job?")){jobs=jobs.filter(x=>x.id!==id);save()}}});
+}
+$("search").oninput=render;document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{filter=b.dataset.f;document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));b.classList.add("active");render()});
+$("saveSettings").onclick=()=>{let p=Math.max(0,Math.min(100,parseFloat($("pct").value)||0));localStorage.setItem("myJobsV2Business",$("biz").value.trim());localStorage.setItem("myJobsV2TechPercent",String(p));localStorage.setItem("myJobsV2AIEndpoint",$("endpoint").value.trim());$("who").textContent=$("biz").value.trim();render();alert("Settings saved.")};
+$("export").onclick=()=>{let rows=jobs.map(j=>{let c=calc(j);return `<tr><td>${esc(j.jobNo)}</td><td>${esc(j.visitDate)}</td><td>${esc(j.customer)}</td><td>${esc(j.address)}</td><td>${esc(j.phone)}</td><td>${esc(j.appliance)}</td><td>${esc(j.brand)}</td><td>${esc(j.model)}</td><td>${esc(j.problem)}</td><td>${esc(j.parts)}</td><td>${c.p}</td><td>${c.t}</td><td>${esc(j.status)}</td><td>${c.e.toFixed(2)}</td></tr>`}).join("");let h=`<table border=1><tr><th>Job</th><th>Date</th><th>Customer</th><th>Address</th><th>Phone</th><th>Appliance</th><th>Brand</th><th>Model</th><th>Problem</th><th>Parts</th><th>Part Cost</th><th>Total</th><th>Status</th><th>Earnings</th></tr>${rows}</table>`;let u=URL.createObjectURL(new Blob([h],{type:"application/vnd.ms-excel"})),a=document.createElement("a");a.href=u;a.download="My_Jobs_V2.xls";a.click();setTimeout(()=>URL.revokeObjectURL(u),1000)};
+function getChat(){try{return JSON.parse(localStorage.getItem("myJobsV2AIChat")||"[]")}catch(e){return[]}}
+function setChat(x){localStorage.setItem("myJobsV2AIChat",JSON.stringify(x.slice(-50)))}
+function renderChat(){let c=getChat();$("chat").innerHTML=c.length?c.map(m=>`<div class="msg ${m.role==="user"?"me":"bot"}">${esc(m.text)}</div>`).join(""):`<div class="muted">Ask about an appliance, error code, part, or repair.</div>`;$("chat").scrollTop=$("chat").scrollHeight}
+function addMsg(role,text){let c=getChat();c.push({role,text,ts:Date.now()});setChat(c);renderChat()}
+$("aiOpen").onclick=()=>{$("aiModal").style.display="flex";renderChat()};$("closeAI").onclick=()=>$("aiModal").style.display="none";$("clearChat").onclick=()=>{localStorage.removeItem("myJobsV2AIChat");renderChat()};
+document.querySelectorAll(".quick button").forEach(b=>b.onclick=()=>{$("question").value=b.dataset.q;$("question").focus()});
+$("photo").onchange=()=>{let f=$("photo").files[0];if(!f){imageData=null;$("preview").style.display="none";return}let r=new FileReader();r.onload=()=>{imageData=r.result;$("preview").src=imageData;$("preview").style.display="block"};r.readAsDataURL(f)};
+$("sendAI").onclick=async()=>{
+ let q=$("question").value.trim();if(!q)return;addMsg("user",q);$("question").value="";
+ let ep=(localStorage.getItem("myJobsV2AIEndpoint")||"").trim();
+ if(!ep){addMsg("assistant","AI backend is not connected yet. Add the AI Backend URL in Settings after the Cloudflare backend is ready.");$("aiStatus").textContent="No backend connected.";return}
+ $("aiStatus").textContent="Thinking...";
+ try{let r=await fetch(ep,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({question:q,model:"gpt-5.6-sol",jobs,today:today(),image:imageData,messages:getChat().slice(-12)})});let d=await r.json();if(!r.ok)throw Error(d.error||("HTTP "+r.status));addMsg("assistant",d.answer||d.output_text||"No answer returned.");$("aiStatus").textContent="Done.";imageData=null;$("photo").value="";$("preview").style.display="none"}catch(e){addMsg("assistant","Backend error: "+e.message);$("aiStatus").textContent="Error."}
+};
+load();
+</script>
+</body></html>
