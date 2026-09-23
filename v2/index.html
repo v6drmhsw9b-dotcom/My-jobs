@@ -34,7 +34,7 @@ hr{border:0;border-top:1px solid #ddd;margin:14px 0}.empty{text-align:center;col
  <div id="actErr" class="error"></div><button id="activate" class="small dark">Activate</button></div>
 </div>
 
-<header><span>My Jobs V2</span><small id="who"></small></header>
+<header><span>My Jobs</span><small id="who"></small></header>
 <div class="tabs">
 <button class="tab active" data-f="all">All</button><button class="tab" data-f="today">Today</button>
 <button class="tab" data-f="open">Incomplete</button><button class="tab" data-f="waiting">Parts Waiting</button>
@@ -42,17 +42,15 @@ hr{border:0;border-top:1px solid #ddd;margin:14px 0}.empty{text-align:center;col
 </div>
 <main>
 <section class="tools">
-<h3>Search & Settings</h3><input id="search" placeholder="Search jobs...">
+<h3>Search & Week</h3><input id="search" placeholder="Search job #, customer, address, phone, appliance, problem...">
 <div class="settingsGrid">
 <div><label>Business Name</label><input id="biz"></div><div><label>Technician %</label><input id="pct" type="number" min="0" max="100" step=".1"></div>
-<div class="wide"><label>AI Backend URL</label><input id="endpoint" placeholder="Add later when Cloudflare AI backend is ready"></div>
 </div>
 <div class="btnrow"><button class="small" id="saveSettings">Save Settings</button><button class="small" id="export">Export XLS</button><button class="small dark" id="aiOpen">AI Assistant</button></div>
-<div class="notice">V2 uses separate local storage. Your old My Jobs data is not overwritten.</div>
 </section>
 <div id="summary" class="summary"></div><div id="list"></div>
 </main>
-<button class="primary" id="newJob">ï¼ New Job</button>
+<button class="primary" id="newJob">+ New Job</button>
 
 <div class="modal" id="jobModal"><div class="sheet">
 <h2>New / Edit Job</h2><input type="hidden" id="editId">
@@ -93,7 +91,6 @@ function load(){
  }catch(e){jobs=[]}
  $("biz").value=localStorage.getItem("myJobsV2Business")||"";
  $("pct").value=localStorage.getItem("myJobsV2TechPercent")||"40";
- $("endpoint").value=localStorage.getItem("myJobsV2AIEndpoint")||"";
  $("who").textContent=localStorage.getItem("myJobsV2Business")||"";
  if(localStorage.getItem("myJobsV2Activated")==="1") $("gate").style.display="none";
  render(); renderChat();
@@ -142,7 +139,7 @@ function render(){
  document.querySelectorAll(".card[data-id]").forEach(el=>{let id=el.dataset.id,j=jobs.find(x=>x.id===id);el.querySelector(".edit").onclick=()=>openJob(j);let c=el.querySelector(".complete");if(c)c.onclick=()=>{j.status="Completed";save()};el.querySelector(".del").onclick=()=>{if(confirm("Delete this job?")){jobs=jobs.filter(x=>x.id!==id);save()}}});
 }
 $("search").oninput=render;document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{filter=b.dataset.f;document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));b.classList.add("active");render()});
-$("saveSettings").onclick=()=>{let p=Math.max(0,Math.min(100,parseFloat($("pct").value)||0));localStorage.setItem("myJobsV2Business",$("biz").value.trim());localStorage.setItem("myJobsV2TechPercent",String(p));localStorage.setItem("myJobsV2AIEndpoint",$("endpoint").value.trim());$("who").textContent=$("biz").value.trim();render();alert("Settings saved.")};
+$("saveSettings").onclick=()=>{let p=Math.max(0,Math.min(100,parseFloat($("pct").value)||0));localStorage.setItem("myJobsV2Business",$("biz").value.trim());localStorage.setItem("myJobsV2TechPercent",String(p));$("who").textContent=$("biz").value.trim();render();alert("Settings saved.")};
 $("export").onclick=()=>{let rows=jobs.map(j=>{let c=calc(j);return `<tr><td>${esc(j.jobNo)}</td><td>${esc(j.visitDate)}</td><td>${esc(j.customer)}</td><td>${esc(j.address)}</td><td>${esc(j.phone)}</td><td>${esc(j.appliance)}</td><td>${esc(j.brand)}</td><td>${esc(j.model)}</td><td>${esc(j.problem)}</td><td>${esc(j.parts)}</td><td>${c.p}</td><td>${c.t}</td><td>${esc(j.status)}</td><td>${c.e.toFixed(2)}</td></tr>`}).join("");let h=`<table border=1><tr><th>Job</th><th>Date</th><th>Customer</th><th>Address</th><th>Phone</th><th>Appliance</th><th>Brand</th><th>Model</th><th>Problem</th><th>Parts</th><th>Part Cost</th><th>Total</th><th>Status</th><th>Earnings</th></tr>${rows}</table>`;let u=URL.createObjectURL(new Blob([h],{type:"application/vnd.ms-excel"})),a=document.createElement("a");a.href=u;a.download="My_Jobs_V2.xls";a.click();setTimeout(()=>URL.revokeObjectURL(u),1000)};
 function getChat(){try{return JSON.parse(localStorage.getItem("myJobsV2AIChat")||"[]")}catch(e){return[]}}
 function setChat(x){localStorage.setItem("myJobsV2AIChat",JSON.stringify(x.slice(-50)))}
@@ -154,7 +151,7 @@ $("photo").onchange=()=>{let f=$("photo").files[0];if(!f){imageData=null;$("prev
 $("sendAI").onclick=async()=>{
  let q=$("question").value.trim();if(!q)return;addMsg("user",q);$("question").value="";
  let ep=(localStorage.getItem("myJobsV2AIEndpoint")||"").trim();
- if(!ep){addMsg("assistant","AI backend is not connected yet. Add the AI Backend URL in Settings after the Cloudflare backend is ready.");$("aiStatus").textContent="No backend connected.";return}
+ if(!ep){addMsg("assistant","AI Assistant is not connected yet. It will work after the AI service is connected.");$("aiStatus").textContent="AI not connected yet.";return}
  $("aiStatus").textContent="Thinking...";
  try{let r=await fetch(ep,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({question:q,model:"gpt-5.6-sol",jobs,today:today(),image:imageData,messages:getChat().slice(-12)})});let d=await r.json();if(!r.ok)throw Error(d.error||("HTTP "+r.status));addMsg("assistant",d.answer||d.output_text||"No answer returned.");$("aiStatus").textContent="Done.";imageData=null;$("photo").value="";$("preview").style.display="none"}catch(e){addMsg("assistant","Backend error: "+e.message);$("aiStatus").textContent="Error."}
 };
